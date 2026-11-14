@@ -1,23 +1,96 @@
 #!/usr/bin/env python3
-# app.py — SMS/CALL web console (Render-ready)
-# local: pip install -r requirements.txt && python app.py
+# app.py — SMS/CALL web console (hardened)
+# local: pip install -r requirements.txt && KLEN_TOKEN=change-me python app.py
 # prod:  gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 16 --worker-class gthread --timeout 120
 
 import hashlib
+import hmac
 import json
 import os
 import random
 import re
 import threading
 import time
-from collections import deque
+from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from functools import wraps
 
 import requests
 from flask import Flask, jsonify, render_template, request
 
 app = Flask(__name__)
+
+# ──────────────────────────────────────────────────────────
+# AUTH
+# ──────────────────────────────────────────────────────────
+
+API_TOKEN = os.environ.get("KLEN_TOKEN", "").strip()
+
+
+def require_token(fn):
+    @wraps(fn)
+    def inner(*args, **kwargs):
+        if not API_TOKEN:
+            return jsonify({"ok": False, "err": "server token unset"}), 503
+        supplied = request.headers.get("X-Token", "")
+        if not supplied:
+            auth = request.headers.get("Authorization", "")
+            if auth.lower().startswith("bearer "):
+                supplied = auth[7:].strip()
+        if not supplied or not hmac.compare_digest(supplied, API_TOKEN):
+            return jsonify({"ok": False, "err": "unauthorized"}), 401
+        return fn(*args, **kwargs)
+    return inner
+
+
+# ──────────────────────────────────────────────────────────
+# RATE LIMIT — per IP, sliding window
+# ──────────────────────────────────────────────────────────
+
+RATE_LOCK = threading.Lock()
+RATE = {
+    "start": defaultdict(deque),
+    "stop": defaultdict(deque),
+    "status": defaultdict(deque),
+}
+
+
+def rate_ok(bucket: str, limit: int, window: float) -> bool:
+    ip = request.headers.get("CF-Connecting-IP") or request.remote_addr or "?"
+    now = time.time()
+    with RATE_LOCK:
+        dq = RATE[bucket][ip]
+        while dq and now - dq[0] > window:
+            dq.popleft()
+        if len(dq) >= limit:
+            return False
+        dq.append(now)
+        return True
+
+
+# ──────────────────────────────────────────────────────────
+# SECURITY HEADERS
+# ──────────────────────────────────────────────────────────
+
+@app.after_request
+def security_headers(resp):
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["X-Frame-Options"] = "DENY"
+    resp.headers["Referrer-Policy"] = "no-referrer"
+    resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    resp.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'; "
+        "base-uri 'none'; "
+        "form-action 'none'"
+    )
+    return resp
+
 
 # ──────────────────────────────────────────────────────────
 # SERVICE DRIVERS
@@ -473,21 +546,38 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/api/ping")
+@require_token
+def api_ping():
+    return jsonify({"ok": True})
+
+
 @app.route("/api/start", methods=["POST"])
+@require_token
 def api_start():
+    if not rate_ok("start", 10, 60.0):
+        return jsonify({"ok": False, "err": "rate limited"}), 429
     if STATE["running"]:
         return jsonify({"ok": False, "err": "already running"}), 409
-    data = request.get_json(force=True, silent=True) or {}
-    phone_raw = str(data.get("phone", "")).strip()
-    f = format_phone(phone_raw)
+
+    data = request.get_json(force=True, silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"ok": False, "err": "body must be a JSON object"}), 400
+
+    f = format_phone(str(data.get("phone", "")).strip())
     if len(f) != 10 or not f.startswith("9"):
         return jsonify({"ok": False, "err": "invalid PH number"}), 400
+
     try:
-        rounds = max(1, min(10, int(data.get("rounds", 3))))
-        voice_calls = max(1, min(10, int(data.get("voice_calls", 3))))
-        interval = max(0.0, min(60.0, float(data.get("interval", 0))))
-    except Exception:
+        rounds = int(data.get("rounds", 3))
+        voice_calls = int(data.get("voice_calls", 3))
+        interval = float(data.get("interval", 0))
+    except (TypeError, ValueError):
         return jsonify({"ok": False, "err": "bad config"}), 400
+
+    rounds = max(1, min(10, rounds))
+    voice_calls = max(0, min(10, voice_calls))
+    interval = max(0.0, min(60.0, interval))
     continuous = bool(data.get("continuous", True))
 
     reset_state(f, continuous, interval)
@@ -504,14 +594,20 @@ def api_start():
 
 
 @app.route("/api/stop", methods=["POST"])
+@require_token
 def api_stop():
+    if not rate_ok("stop", 10, 60.0):
+        return jsonify({"ok": False, "err": "rate limited"}), 429
     STATE["stop_flag"].set()
     log("system", "stop requested")
     return jsonify({"ok": True})
 
 
 @app.route("/api/status")
+@require_token
 def api_status():
+    if not rate_ok("status", 240, 60.0):
+        return jsonify({"ok": False, "err": "rate limited"}), 429
     with LOCK:
         started = STATE["started_at"]
         uptime = (time.time() - started) if started and STATE["running"] else 0
@@ -532,6 +628,9 @@ def api_status():
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    print(f"KLEN web console — http://0.0.0.0:{port}")
-    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
+    if not API_TOKEN:
+        print("KLEN web console — REFUSING TO RUN: KLEN_TOKEN unset")
+    else:
+        port = int(os.environ.get("PORT", 5000))
+        print(f"KLEN web console — http://0.0.0.0:{port}")
+        app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
