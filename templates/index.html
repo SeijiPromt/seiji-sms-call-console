@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>sms · call console</title>
+<style>
+  :root{
+    --bg:#0a0a0b; --panel:#121216; --line:#1e1e24;
+    --txt:#d8d8de; --dim:#6a6a76; --accent:#ff5533;
+    --ok:#38d39f; --bad:#ff3355; --warn:#ffb347;
+    --mono:'JetBrains Mono','Fira Code',ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);
+    font-family:var(--mono);font-size:14px;line-height:1.5}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1180px;margin:0 auto;padding:24px 20px 48px}
+  header{display:flex;align-items:baseline;justify-content:space-between;
+    border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:22px}
+  .brand{font-size:15px;letter-spacing:.28em;color:var(--txt);text-transform:uppercase}
+  .brand span{color:var(--accent)}
+  .status{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--dim)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--dim)}
+  .dot.live{background:var(--ok);box-shadow:0 0 8px var(--ok);animation:pulse 1.4s infinite}
+  @keyframes pulse{50%{opacity:.4}}
+
+  .grid{display:grid;grid-template-columns:340px 1fr;gap:18px}
+  @media(max-width:860px){.grid{grid-template-columns:1fr}}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:18px}
+  .card h2{margin:0 0 14px;font-size:11px;letter-spacing:.22em;color:var(--dim);
+    text-transform:uppercase;font-weight:500}
+
+  label{display:block;font-size:11px;color:var(--dim);
+    letter-spacing:.14em;text-transform:uppercase;margin:12px 0 6px}
+  input[type=text],input[type=number]{
+    width:100%;background:#0e0e12;color:var(--txt);border:1px solid var(--line);
+    border-radius:5px;padding:9px 11px;font-family:var(--mono);font-size:14px;outline:none}
+  input:focus{border-color:var(--accent)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+  .toggle{display:flex;align-items:center;gap:10px;margin-top:14px;
+    font-size:12px;color:var(--txt);cursor:pointer;user-select:none}
+  .toggle input{display:none}
+  .track{width:36px;height:20px;border-radius:10px;background:#1e1e24;
+    position:relative;transition:background .15s}
+  .track::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;
+    border-radius:50%;background:var(--dim);transition:all .15s}
+  .toggle input:checked + .track{background:rgba(255,85,51,.25)}
+  .toggle input:checked + .track::after{left:18px;background:var(--accent)}
+
+  .actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}
+  button{border:1px solid var(--line);background:#16161b;color:var(--txt);
+    padding:11px;border-radius:5px;font-family:var(--mono);font-size:12px;
+    letter-spacing:.14em;text-transform:uppercase;cursor:pointer;transition:.12s}
+  button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+  button:disabled{opacity:.35;cursor:not-allowed}
+  button.fire{background:var(--accent);border-color:var(--accent);color:#0a0a0b;font-weight:600}
+  button.fire:hover:not(:disabled){background:#ff7055;color:#0a0a0b}
+  button.stop{border-color:var(--bad);color:var(--bad)}
+  button.stop:hover:not(:disabled){background:rgba(255,51,85,.12)}
+
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+  @media(max-width:640px){.stats{grid-template-columns:repeat(2,1fr)}}
+  .stat{background:#0e0e12;border:1px solid var(--line);border-radius:6px;padding:12px}
+  .stat .k{font-size:10px;letter-spacing:.18em;color:var(--dim);text-transform:uppercase}
+  .stat .v{font-size:20px;color:var(--txt);margin-top:4px;font-weight:600}
+  .stat .s{font-size:11px;color:var(--dim);margin-top:2px}
+  .stat .v.ok{color:var(--ok)}
+  .stat .v.bad{color:var(--bad)}
+  .stat .v.warn{color:var(--warn)}
+
+  .logbox{background:#060608;border:1px solid var(--line);border-radius:6px;
+    height:520px;overflow-y:auto;padding:12px;font-size:12px}
+  .logbox::-webkit-scrollbar{width:8px}
+  .logbox::-webkit-scrollbar-thumb{background:#1e1e24;border-radius:4px}
+  .ln{display:grid;grid-template-columns:64px 62px 1fr;gap:10px;padding:1px 0}
+  .ln .t{color:var(--dim)}
+  .ln .k{text-transform:uppercase;font-size:10px;letter-spacing:.1em;padding-top:2px}
+  .ln.sms .k{color:var(--warn)}
+  .ln.voice .k{color:#5eb3ff}
+  .ln.cycle .k{color:var(--accent)}
+  .ln.system .k{color:var(--dim)}
+  .ln .m{color:var(--txt);word-break:break-all}
+  .ln .m .ok{color:var(--ok)}
+  .ln .m .bad{color:var(--bad)}
+  .empty{color:var(--dim);text-align:center;padding:40px 0;font-style:italic}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">sms<span>·</span>call console</div>
+    <div class="status">
+      <div class="dot" id="dot"></div>
+      <span id="statusTxt">idle</span>
+    </div>
+  </header>
+
+  <div class="grid">
+
+    <div class="card">
+      <h2>config</h2>
+
+      <label>target number</label>
+      <input type="text" id="phone" placeholder="09XXXXXXXXX" autocomplete="off" />
+
+      <div class="row">
+        <div>
+          <label>sms rounds</label>
+          <input type="number" id="rounds" value="3" min="1" max="10" />
+        </div>
+        <div>
+          <label>voice calls</label>
+          <input type="number" id="voice" value="3" min="1" max="10" />
+        </div>
+      </div>
+
+      <label>cycle interval (seconds)</label>
+      <input type="number" id="interval" value="0" min="0" max="60" step="0.5" />
+
+      <label class="toggle">
+        <input type="checkbox" id="continuous" checked />
+        <span class="track"></span>
+        <span>continuous — loop forever</span>
+      </label>
+
+      <div class="actions">
+        <button class="fire" id="btnStart">start</button>
+        <button class="stop" id="btnStop" disabled>stop</button>
+      </div>
+    </div>
+
+    <div>
+      <div class="stats">
+        <div class="stat">
+          <div class="k">cycle</div>
+          <div class="v" id="sCycle">0</div>
+          <div class="s" id="sUptime">0s</div>
+        </div>
+        <div class="stat">
+          <div class="k">sms</div>
+          <div class="v ok" id="sSms">0</div>
+          <div class="s" id="sSmsTotal">0 fired</div>
+        </div>
+        <div class="stat">
+          <div class="k">voice</div>
+          <div class="v warn" id="sVoice">0</div>
+          <div class="s" id="sVoiceTotal">0 fired</div>
+        </div>
+        <div class="stat">
+          <div class="k">target</div>
+          <div class="v" id="sTarget" style="font-size:14px">—</div>
+          <div class="s" id="sMode">—</div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:0;overflow:hidden">
+        <div class="logbox" id="log">
+          <div class="empty">waiting for start…</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const dot = $('dot'), statusTxt = $('statusTxt');
+const logBox = $('log');
+let autoScroll = true;
+logBox.addEventListener('scroll', () => {
+  autoScroll = logBox.scrollTop + logBox.clientHeight >= logBox.scrollHeight - 12;
+});
+
+function fmtUptime(s){
+  s = Math.floor(s);
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), r = s%60;
+  if(h) return `${h}h ${m}m`;
+  if(m) return `${m}m ${r}s`;
+  return `${r}s`;
+}
+
+function renderLog(lines){
+  if(!lines.length){
+    logBox.innerHTML = '<div class="empty">waiting for start…</div>';
+    return;
+  }
+  logBox.innerHTML = lines.map(l => {
+    let m = l.msg;
+    m = m.replace(/\bOK\b/g, '<span class="ok">OK</span>');
+    m = m.replace(/\bFAIL\b/g, '<span class="bad">FAIL</span>');
+    return `<div class="ln ${l.kind}">
+      <span class="t">${l.t}</span>
+      <span class="k">${l.kind}</span>
+      <span class="m">${m}</span>
+    </div>`;
+  }).join('');
+  if(autoScroll) logBox.scrollTop = logBox.scrollHeight;
+}
+
+async function poll(){
+  try{
+    const r = await fetch('/api/status');
+    const s = await r.json();
+    dot.classList.toggle('live', s.running);
+    statusTxt.textContent = s.running
+      ? (s.continuous ? 'looping' : 'running')
+      : 'idle';
+    $('btnStart').disabled = s.running;
+    $('btnStop').disabled  = !s.running;
+
+    $('sCycle').textContent = s.cycle;
+    $('sUptime').textContent = s.running ? fmtUptime(s.uptime) : '—';
+    $('sSms').textContent = s.sms_ok;
+    $('sSmsTotal').textContent = `${s.sms_total} fired`;
+    $('sVoice').textContent = s.voice_ok;
+    $('sVoiceTotal').textContent = `${s.voice_total} fired`;
+    $('sTarget').textContent = s.phone ? `+63${s.phone}` : '—';
+    $('sMode').textContent = s.running
+      ? (s.continuous ? `loop · ${s.interval}s` : 'single pass')
+      : '—';
+
+    renderLog(s.log);
+  }catch(e){ /* ignore */ }
+}
+
+$('btnStart').onclick = async () => {
+  const body = {
+    phone: $('phone').value.trim(),
+    rounds: parseInt($('rounds').value,10) || 3,
+    voice_calls: parseInt($('voice').value,10) || 3,
+    interval: parseFloat($('interval').value) || 0,
+    continuous: $('continuous').checked,
+  };
+  const r = await fetch('/api/start',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(body)
+  });
+  const d = await r.json();
+  if(!d.ok){ alert(d.err || 'failed'); return; }
+  poll();
+};
+
+$('btnStop').onclick = async () => {
+  await fetch('/api/stop',{method:'POST'});
+  poll();
+};
+
+setInterval(poll, 500);
+poll();
+</script>
+</body>
+</html>
