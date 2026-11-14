@@ -3,9 +3,12 @@ services:
     name: sms-call-console
     env: python
     plan: free
+    region: singapore
+    branch: main
+    autoDeploy: true
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 16 --worker-class gthread --timeout 120
     healthCheckPath: /api/ping
     envVars:
-      - key: KLEN_TOKEN
-        generateValue: true
+      - key: PYTHON_VERSION
+        value: 3.11.9
