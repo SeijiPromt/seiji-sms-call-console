@@ -14,16 +14,28 @@
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);
     font-family:var(--mono);font-size:14px;line-height:1.5}
-  a{color:inherit;text-decoration:none}
   .wrap{max-width:1180px;margin:0 auto;padding:24px 20px 48px}
   header{display:flex;align-items:baseline;justify-content:space-between;
     border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:22px}
   .brand{font-size:15px;letter-spacing:.28em;color:var(--txt);text-transform:uppercase}
   .brand span{color:var(--accent)}
-  .status{display:flex;gap:8px;align-items:center;font-size:12px;color:var(--dim)}
+  .status{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--dim)}
   .dot{width:8px;height:8px;border-radius:50%;background:var(--dim)}
   .dot.live{background:var(--ok);box-shadow:0 0 8px var(--ok);animation:pulse 1.4s infinite}
   @keyframes pulse{50%{opacity:.4}}
+  .linkbtn{background:none;border:none;color:var(--dim);font-family:var(--mono);
+    font-size:11px;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;padding:0}
+  .linkbtn:hover{color:var(--accent)}
+
+  .gate{position:fixed;inset:0;background:rgba(10,10,11,.96);z-index:50;
+    display:flex;align-items:center;justify-content:center;padding:20px}
+  .gate.hidden{display:none}
+  .gatebox{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    padding:28px;width:100%;max-width:420px}
+  .gatebox h1{margin:0 0 6px;font-size:13px;letter-spacing:.28em;
+    text-transform:uppercase;font-weight:500}
+  .gatebox p{margin:0 0 18px;font-size:11px;color:var(--dim);letter-spacing:.06em}
+  .gatebox .err{color:var(--bad);font-size:11px;margin-top:10px;min-height:14px}
 
   .grid{display:grid;grid-template-columns:340px 1fr;gap:18px}
   @media(max-width:860px){.grid{grid-template-columns:1fr}}
@@ -34,7 +46,7 @@
 
   label{display:block;font-size:11px;color:var(--dim);
     letter-spacing:.14em;text-transform:uppercase;margin:12px 0 6px}
-  input[type=text],input[type=number]{
+  input[type=text],input[type=number],input[type=password]{
     width:100%;background:#0e0e12;color:var(--txt);border:1px solid var(--line);
     border-radius:5px;padding:9px 11px;font-family:var(--mono);font-size:14px;outline:none}
   input:focus{border-color:var(--accent)}
@@ -89,6 +101,19 @@
 </style>
 </head>
 <body>
+
+<div class="gate" id="gate">
+  <div class="gatebox">
+    <h1>console access</h1>
+    <p>bearer token required · set in render env as KLEN_TOKEN</p>
+    <input type="password" id="tokenInput" placeholder="paste token" autocomplete="off" />
+    <div class="actions" style="margin-top:14px">
+      <button class="fire" id="btnUnlock" style="grid-column:span 2">unlock</button>
+    </div>
+    <div class="err" id="gateErr"></div>
+  </div>
+</div>
+
 <div class="wrap">
 
   <header>
@@ -96,6 +121,7 @@
     <div class="status">
       <div class="dot" id="dot"></div>
       <span id="statusTxt">idle</span>
+      <button class="linkbtn" id="btnLogout">logout</button>
     </div>
   </header>
 
@@ -114,7 +140,7 @@
         </div>
         <div>
           <label>voice calls</label>
-          <input type="number" id="voice" value="3" min="1" max="10" />
+          <input type="number" id="voice" value="3" min="0" max="10" />
         </div>
       </div>
 
@@ -169,12 +195,59 @@
 
 <script>
 const $ = id => document.getElementById(id);
+const gate = $('gate'), gateErr = $('gateErr'), tokenInput = $('tokenInput');
 const dot = $('dot'), statusTxt = $('statusTxt');
 const logBox = $('log');
+
+let TOKEN = sessionStorage.getItem('klen_token') || '';
 let autoScroll = true;
+
 logBox.addEventListener('scroll', () => {
   autoScroll = logBox.scrollTop + logBox.clientHeight >= logBox.scrollHeight - 12;
 });
+
+function authHeaders(extra) {
+  const h = Object.assign({'X-Token': TOKEN}, extra || {});
+  return h;
+}
+
+function showGate(msg) {
+  gate.classList.remove('hidden');
+  gateErr.textContent = msg || '';
+}
+
+function hideGate() {
+  gate.classList.add('hidden');
+  gateErr.textContent = '';
+}
+
+function logout() {
+  TOKEN = '';
+  sessionStorage.removeItem('klen_token');
+  tokenInput.value = '';
+  showGate('');
+}
+
+$('btnLogout').onclick = logout;
+
+async function tryUnlock() {
+  const t = tokenInput.value.trim();
+  if (!t) { gateErr.textContent = 'token empty'; return; }
+  try {
+    const r = await fetch('/api/ping', {headers: {'X-Token': t}});
+    if (r.status === 401) { gateErr.textContent = 'invalid token'; return; }
+    if (!r.ok) { gateErr.textContent = 'server error ' + r.status; return; }
+    TOKEN = t;
+    sessionStorage.setItem('klen_token', t);
+    hideGate();
+    poll();
+  } catch (e) {
+    gateErr.textContent = 'network error';
+  }
+}
+
+$('btnUnlock').onclick = tryUnlock;
+tokenInput.addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
 
 function fmtUptime(s){
   s = Math.floor(s);
@@ -190,7 +263,8 @@ function renderLog(lines){
     return;
   }
   logBox.innerHTML = lines.map(l => {
-    let m = l.msg;
+    let m = String(l.msg);
+    m = m.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     m = m.replace(/\bOK\b/g, '<span class="ok">OK</span>');
     m = m.replace(/\bFAIL\b/g, '<span class="bad">FAIL</span>');
     return `<div class="ln ${l.kind}">
@@ -203,8 +277,11 @@ function renderLog(lines){
 }
 
 async function poll(){
+  if(!TOKEN) return;
   try{
-    const r = await fetch('/api/status');
+    const r = await fetch('/api/status', {headers: authHeaders()});
+    if (r.status === 401) { logout(); return; }
+    if (!r.ok) return;
     const s = await r.json();
     dot.classList.toggle('live', s.running);
     statusTxt.textContent = s.running
@@ -232,26 +309,42 @@ $('btnStart').onclick = async () => {
   const body = {
     phone: $('phone').value.trim(),
     rounds: parseInt($('rounds').value,10) || 3,
-    voice_calls: parseInt($('voice').value,10) || 3,
+    voice_calls: parseInt($('voice').value,10),
     interval: parseFloat($('interval').value) || 0,
     continuous: $('continuous').checked,
   };
+  if (isNaN(body.voice_calls)) body.voice_calls = 0;
   const r = await fetch('/api/start',{
-    method:'POST', headers:{'Content-Type':'application/json'},
+    method:'POST',
+    headers: authHeaders({'Content-Type':'application/json'}),
     body: JSON.stringify(body)
   });
-  const d = await r.json();
+  if (r.status === 401) { logout(); return; }
+  const d = await r.json().catch(() => ({}));
   if(!d.ok){ alert(d.err || 'failed'); return; }
   poll();
 };
 
 $('btnStop').onclick = async () => {
-  await fetch('/api/stop',{method:'POST'});
+  const r = await fetch('/api/stop',{method:'POST', headers: authHeaders()});
+  if (r.status === 401) { logout(); return; }
   poll();
 };
 
-setInterval(poll, 500);
-poll();
+(function boot(){
+  if (TOKEN) {
+    fetch('/api/ping', {headers: {'X-Token': TOKEN}})
+      .then(r => {
+        if (r.ok) { hideGate(); setInterval(poll, 500); poll(); }
+        else { showGate(''); }
+      })
+      .catch(() => showGate('network error'));
+  } else {
+    showGate('');
+  }
+})();
+
+setInterval(() => { if (TOKEN && !gate.classList.contains('hidden')) return; }, 1000);
 </script>
 </body>
 </html>
