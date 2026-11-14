@@ -1,96 +1,35 @@
 #!/usr/bin/env python3
-# app.py — SMS/CALL web console (hardened)
-# local: pip install -r requirements.txt && KLEN_TOKEN=change-me python app.py
+# app.py — SMS/CALL web console (open · per-session isolation)
+# local: pip install -r requirements.txt && python app.py
 # prod:  gunicorn app:app --bind 0.0.0.0:$PORT --workers 1 --threads 16 --worker-class gthread --timeout 120
 
 import hashlib
-import hmac
 import json
 import os
 import random
 import re
 import threading
 import time
+import uuid
 from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from functools import wraps
 
 import requests
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, make_response, render_template, request
 
 app = Flask(__name__)
 
 # ──────────────────────────────────────────────────────────
-# AUTH
+# TUNING
 # ──────────────────────────────────────────────────────────
 
-API_TOKEN = os.environ.get("KLEN_TOKEN", "").strip()
-
-
-def require_token(fn):
-    @wraps(fn)
-    def inner(*args, **kwargs):
-        if not API_TOKEN:
-            return jsonify({"ok": False, "err": "server token unset"}), 503
-        supplied = request.headers.get("X-Token", "")
-        if not supplied:
-            auth = request.headers.get("Authorization", "")
-            if auth.lower().startswith("bearer "):
-                supplied = auth[7:].strip()
-        if not supplied or not hmac.compare_digest(supplied, API_TOKEN):
-            return jsonify({"ok": False, "err": "unauthorized"}), 401
-        return fn(*args, **kwargs)
-    return inner
-
-
-# ──────────────────────────────────────────────────────────
-# RATE LIMIT — per IP, sliding window
-# ──────────────────────────────────────────────────────────
-
-RATE_LOCK = threading.Lock()
-RATE = {
-    "start": defaultdict(deque),
-    "stop": defaultdict(deque),
-    "status": defaultdict(deque),
-}
-
-
-def rate_ok(bucket: str, limit: int, window: float) -> bool:
-    ip = request.headers.get("CF-Connecting-IP") or request.remote_addr or "?"
-    now = time.time()
-    with RATE_LOCK:
-        dq = RATE[bucket][ip]
-        while dq and now - dq[0] > window:
-            dq.popleft()
-        if len(dq) >= limit:
-            return False
-        dq.append(now)
-        return True
-
-
-# ──────────────────────────────────────────────────────────
-# SECURITY HEADERS
-# ──────────────────────────────────────────────────────────
-
-@app.after_request
-def security_headers(resp):
-    resp.headers["X-Content-Type-Options"] = "nosniff"
-    resp.headers["X-Frame-Options"] = "DENY"
-    resp.headers["Referrer-Policy"] = "no-referrer"
-    resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    resp.headers["Content-Security-Policy"] = (
-        "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline'; "
-        "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data:; "
-        "connect-src 'self'; "
-        "frame-ancestors 'none'; "
-        "base-uri 'none'; "
-        "form-action 'none'"
-    )
-    return resp
-
+MAX_SESSIONS            = 4      # hard cap, free tier RAM
+MAX_CONCURRENT_CAMPAIGNS = 3     # active workers at once
+SESSION_IDLE_SECONDS    = 600    # 10 min no poll -> reap
+START_RATE_PER_IP       = 5      # starts per minute per IP
+STATUS_RATE_PER_IP      = 600    # status polls per minute per IP
 
 # ──────────────────────────────────────────────────────────
 # SERVICE DRIVERS
@@ -428,82 +367,169 @@ VOICE_SERVICES = [
 ]
 
 # ──────────────────────────────────────────────────────────
-# STATE
+# SESSION STATE
 # ──────────────────────────────────────────────────────────
 
-LOCK = threading.Lock()
-STATE = {
-    "running": False,
-    "phone": "",
-    "continuous": False,
-    "interval": 0.0,
-    "cycle": 0,
-    "sms_ok": 0,
-    "sms_total": 0,
-    "voice_ok": 0,
-    "voice_total": 0,
-    "started_at": None,
-    "stop_flag": threading.Event(),
-    "log": deque(maxlen=800),
+class Session:
+    def __init__(self, sid: str):
+        self.sid = sid
+        self.lock = threading.Lock()
+        self.running = False
+        self.phone = ""
+        self.continuous = False
+        self.interval = 0.0
+        self.cycle = 0
+        self.sms_ok = 0
+        self.sms_total = 0
+        self.voice_ok = 0
+        self.voice_total = 0
+        self.started_at = None
+        self.stop_flag = threading.Event()
+        self.log = deque(maxlen=400)
+        self.last_seen = time.time()
+        self.worker = None
+
+    def touch(self):
+        self.last_seen = time.time()
+
+    def logline(self, kind: str, msg: str):
+        with self.lock:
+            self.log.append({"t": datetime.now().strftime("%H:%M:%S"),
+                             "kind": kind, "msg": msg})
+
+    def snapshot(self) -> dict:
+        with self.lock:
+            started = self.started_at
+            uptime = (time.time() - started) if started and self.running else 0
+            return {
+                "running": self.running,
+                "phone": self.phone,
+                "continuous": self.continuous,
+                "interval": self.interval,
+                "cycle": self.cycle,
+                "sms_ok": self.sms_ok,
+                "sms_total": self.sms_total,
+                "voice_ok": self.voice_ok,
+                "voice_total": self.voice_total,
+                "uptime": round(uptime, 1),
+                "log": list(self.log)[-120:],
+            }
+
+
+SESSIONS: dict[str, Session] = {}
+SESSIONS_LOCK = threading.Lock()
+
+def active_campaigns() -> int:
+    with SESSIONS_LOCK:
+        return sum(1 for s in SESSIONS.values() if s.running)
+
+
+def get_or_create_session() -> Session:
+    sid = request.cookies.get("sid", "")
+    with SESSIONS_LOCK:
+        if sid and sid in SESSIONS:
+            s = SESSIONS[sid]
+            s.touch()
+            return s
+        if len(SESSIONS) >= MAX_SESSIONS:
+            # drop the oldest idle session if possible
+            idle = [(s.last_seen, k) for k, s in SESSIONS.items() if not s.running]
+            if idle:
+                _, dead_sid = min(idle)
+                SESSIONS.pop(dead_sid, None)
+            else:
+                raise RuntimeError("busy")
+        sid = uuid.uuid4().hex
+        s = Session(sid)
+        SESSIONS[sid] = s
+        return s
+
+
+def attach_cookie(resp, sid: str):
+    resp.set_cookie("sid", sid, max_age=SESSION_IDLE_SECONDS * 2,
+                    httponly=True, samesite="Lax", secure=True)
+
+
+# ──────────────────────────────────────────────────────────
+# RATE LIMIT — per IP
+# ──────────────────────────────────────────────────────────
+
+RATE_LOCK = threading.Lock()
+RATE: dict[str, defaultdict] = {
+    "start": defaultdict(deque),
+    "status": defaultdict(deque),
 }
-WORKER = {"thread": None}
 
 
-def log(kind: str, msg: str) -> None:
-    entry = {
-        "t": datetime.now().strftime("%H:%M:%S"),
-        "kind": kind,
-        "msg": msg,
-    }
-    with LOCK:
-        STATE["log"].append(entry)
+def rate_ok(bucket: str, limit: int, window: float = 60.0) -> bool:
+    ip = request.headers.get("CF-Connecting-IP") or request.remote_addr or "?"
+    now = time.time()
+    with RATE_LOCK:
+        dq = RATE[bucket][ip]
+        while dq and now - dq[0] > window:
+            dq.popleft()
+        if len(dq) >= limit:
+            return False
+        dq.append(now)
+        return True
 
 
-def reset_state(phone: str, continuous: bool, interval: float) -> None:
-    with LOCK:
-        STATE["running"] = True
-        STATE["phone"] = phone
-        STATE["continuous"] = continuous
-        STATE["interval"] = float(interval)
-        STATE["cycle"] = 0
-        STATE["sms_ok"] = 0
-        STATE["sms_total"] = 0
-        STATE["voice_ok"] = 0
-        STATE["voice_total"] = 0
-        STATE["started_at"] = time.time()
-        STATE["stop_flag"].clear()
-        STATE["log"].clear()
+# ──────────────────────────────────────────────────────────
+# SECURITY HEADERS
+# ──────────────────────────────────────────────────────────
+
+@app.after_request
+def security_headers(resp):
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["X-Frame-Options"] = "DENY"
+    resp.headers["Referrer-Policy"] = "no-referrer"
+    resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    resp.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'; "
+        "base-uri 'none'; "
+        "form-action 'none'"
+    )
+    return resp
 
 
-def fire_one(kind: str, name: str, func, phone: str, ident: int) -> bool:
-    if STATE["stop_flag"].is_set():
+# ──────────────────────────────────────────────────────────
+# WORKER — per session
+# ──────────────────────────────────────────────────────────
+
+def fire_one(sess: Session, kind: str, name: str, func, phone: str, ident: int) -> bool:
+    if sess.stop_flag.is_set():
         return False
     try:
         ok = bool(func(phone))
     except Exception:
         ok = False
-    with LOCK:
+    with sess.lock:
         if kind == "sms":
-            STATE["sms_total"] += 1
+            sess.sms_total += 1
             if ok:
-                STATE["sms_ok"] += 1
+                sess.sms_ok += 1
         else:
-            STATE["voice_total"] += 1
+            sess.voice_total += 1
             if ok:
-                STATE["voice_ok"] += 1
-    log(kind, f"{name} [{ident}] {'OK' if ok else 'FAIL'}")
+                sess.voice_ok += 1
+    sess.logline(kind, f"{name} [{ident}] {'OK' if ok else 'FAIL'}")
     return ok
 
 
-def run_cycle(phone: str, rounds: int, voice_calls: int) -> None:
+def run_cycle(sess: Session, phone: str, rounds: int, voice_calls: int):
     with ThreadPoolExecutor(max_workers=30) as ex:
         futs = []
         for r in range(1, rounds + 1):
             for name, fn in SMS_SERVICES:
-                futs.append(ex.submit(fire_one, "sms", name, fn, phone, r))
+                futs.append(ex.submit(fire_one, sess, "sms", name, fn, phone, r))
         for c in range(1, voice_calls + 1):
             for name, fn in VOICE_SERVICES:
-                futs.append(ex.submit(fire_one, "voice", name, fn, phone, c))
+                futs.append(ex.submit(fire_one, sess, "voice", name, fn, phone, c))
         for f in futs:
             try:
                 f.result()
@@ -511,31 +537,46 @@ def run_cycle(phone: str, rounds: int, voice_calls: int) -> None:
                 pass
 
 
-def worker(phone: str, rounds: int, voice_calls: int,
-           continuous: bool, interval: float) -> None:
+def worker_loop(sess: Session, phone: str, rounds: int, voice_calls: int,
+                continuous: bool, interval: float):
     while True:
-        if STATE["stop_flag"].is_set():
+        if sess.stop_flag.is_set():
             break
-        with LOCK:
-            STATE["cycle"] += 1
-            cyc = STATE["cycle"]
-        log("cycle", f"=== cycle {cyc} start ===")
-        run_cycle(phone, rounds, voice_calls)
-        with LOCK:
-            sms_ok = STATE["sms_ok"]
-            sms_total = STATE["sms_total"]
-            voice_ok = STATE["voice_ok"]
-            voice_total = STATE["voice_total"]
-        log("cycle",
-            f"=== cycle {cyc} end · sms {sms_ok}/{sms_total} · voice {voice_ok}/{voice_total} ===")
+        with sess.lock:
+            sess.cycle += 1
+            cyc = sess.cycle
+        sess.logline("cycle", f"=== cycle {cyc} start ===")
+        run_cycle(sess, phone, rounds, voice_calls)
+        with sess.lock:
+            snap = (sess.sms_ok, sess.sms_total, sess.voice_ok, sess.voice_total)
+        sess.logline("cycle",
+            f"=== cycle {cyc} end · sms {snap[0]}/{snap[1]} · voice {snap[2]}/{snap[3]} ===")
         if not continuous:
             break
         if interval > 0:
-            if STATE["stop_flag"].wait(interval):
+            if sess.stop_flag.wait(interval):
                 break
-    with LOCK:
-        STATE["running"] = False
-    log("system", "worker stopped")
+    with sess.lock:
+        sess.running = False
+    sess.logline("system", "worker stopped")
+
+
+# ──────────────────────────────────────────────────────────
+# GC — reap idle sessions
+# ──────────────────────────────────────────────────────────
+
+def gc_loop():
+    while True:
+        time.sleep(60)
+        now = time.time()
+        with SESSIONS_LOCK:
+            dead = [sid for sid, s in SESSIONS.items()
+                    if not s.running and now - s.last_seen > SESSION_IDLE_SECONDS]
+            for sid in dead:
+                SESSIONS.pop(sid, None)
+
+
+threading.Thread(target=gc_loop, daemon=True).start()
 
 # ──────────────────────────────────────────────────────────
 # ROUTES
@@ -543,22 +584,29 @@ def worker(phone: str, rounds: int, voice_calls: int,
 
 @app.route("/")
 def index():
-    return render_template("index.html")
-
-
-@app.route("/api/ping")
-@require_token
-def api_ping():
-    return jsonify({"ok": True})
+    try:
+        sess = get_or_create_session()
+    except RuntimeError:
+        return ("server busy, retry in 30s", 503,
+                {"Retry-After": "30", "Content-Type": "text/plain"})
+    resp = make_response(render_template("index.html"))
+    attach_cookie(resp, sess.sid)
+    return resp
 
 
 @app.route("/api/start", methods=["POST"])
-@require_token
 def api_start():
-    if not rate_ok("start", 10, 60.0):
+    if not rate_ok("start", START_RATE_PER_IP):
         return jsonify({"ok": False, "err": "rate limited"}), 429
-    if STATE["running"]:
+    try:
+        sess = get_or_create_session()
+    except RuntimeError:
+        return jsonify({"ok": False, "err": "server busy"}), 503
+
+    if sess.running:
         return jsonify({"ok": False, "err": "already running"}), 409
+    if active_campaigns() >= MAX_CONCURRENT_CAMPAIGNS:
+        return jsonify({"ok": False, "err": "too many active campaigns, retry shortly"}), 503
 
     data = request.get_json(force=True, silent=True)
     if not isinstance(data, dict):
@@ -580,57 +628,63 @@ def api_start():
     interval = max(0.0, min(60.0, interval))
     continuous = bool(data.get("continuous", True))
 
-    reset_state(f, continuous, interval)
-    log("system",
+    with sess.lock:
+        sess.phone = f
+        sess.continuous = continuous
+        sess.interval = interval
+        sess.cycle = 0
+        sess.sms_ok = 0
+        sess.sms_total = 0
+        sess.voice_ok = 0
+        sess.voice_total = 0
+        sess.started_at = time.time()
+        sess.running = True
+        sess.stop_flag.clear()
+        sess.log.clear()
+    sess.logline("system",
         f"launch phone={f} rounds={rounds} voice={voice_calls} "
         f"continuous={continuous} interval={interval}s")
 
-    t = threading.Thread(target=worker,
-                         args=(f, rounds, voice_calls, continuous, interval),
+    t = threading.Thread(target=worker_loop,
+                         args=(sess, f, rounds, voice_calls, continuous, interval),
                          daemon=True)
-    WORKER["thread"] = t
+    sess.worker = t
     t.start()
     return jsonify({"ok": True, "phone": f})
 
 
 @app.route("/api/stop", methods=["POST"])
-@require_token
 def api_stop():
-    if not rate_ok("stop", 10, 60.0):
-        return jsonify({"ok": False, "err": "rate limited"}), 429
-    STATE["stop_flag"].set()
-    log("system", "stop requested")
+    try:
+        sess = get_or_create_session()
+    except RuntimeError:
+        return jsonify({"ok": False, "err": "server busy"}), 503
+    sess.stop_flag.set()
+    sess.logline("system", "stop requested")
     return jsonify({"ok": True})
 
 
 @app.route("/api/status")
-@require_token
 def api_status():
-    if not rate_ok("status", 240, 60.0):
+    if not rate_ok("status", STATUS_RATE_PER_IP):
         return jsonify({"ok": False, "err": "rate limited"}), 429
-    with LOCK:
-        started = STATE["started_at"]
-        uptime = (time.time() - started) if started and STATE["running"] else 0
-        snapshot = {
-            "running": STATE["running"],
-            "phone": STATE["phone"],
-            "continuous": STATE["continuous"],
-            "interval": STATE["interval"],
-            "cycle": STATE["cycle"],
-            "sms_ok": STATE["sms_ok"],
-            "sms_total": STATE["sms_total"],
-            "voice_ok": STATE["voice_ok"],
-            "voice_total": STATE["voice_total"],
-            "uptime": round(uptime, 1),
-            "log": list(STATE["log"])[-120:],
-        }
-    return jsonify(snapshot)
+    try:
+        sess = get_or_create_session()
+    except RuntimeError:
+        return jsonify({"ok": False, "err": "server busy"}), 503
+    snap = sess.snapshot()
+    snap["ok"] = True
+    resp = jsonify(snap)
+    attach_cookie(resp, sess.sid)
+    return resp
+
+
+@app.route("/api/ping")
+def api_ping():
+    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":
-    if not API_TOKEN:
-        print("KLEN web console — REFUSING TO RUN: KLEN_TOKEN unset")
-    else:
-        port = int(os.environ.get("PORT", 5000))
-        print(f"KLEN web console — http://0.0.0.0:{port}")
-        app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
+    port = int(os.environ.get("PORT", 5000))
+    print(f"KLEN web console — http://0.0.0.0:{port}")
+    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
