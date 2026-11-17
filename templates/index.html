@@ -1,1733 +1,269 @@
-
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#04111d">
-<title>SEIJI // Notify Console</title>
-
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>sms · call console</title>
 <style>
-:root {
-  color-scheme: dark;
-  --bg: #030b13;
-  --panel: #071826;
-  --line: rgba(0,210,255,.25);
-  --line2: rgba(0,210,255,.52);
-  --cyan: #08d9f7;
-  --green: #18e6a2;
-  --text: #e9f8ff;
-  --muted: #82a9bd;
-  --radius: 19px;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-html {
-  scroll-behavior: smooth;
-}
-
-body {
-  margin: 0;
-  min-height: 100vh;
-  background:
-    radial-gradient(ellipse at 82% 8%, rgba(0,182,255,.14), transparent 30%),
-    radial-gradient(ellipse at 5% 80%, rgba(0,90,160,.12), transparent 32%),
-    var(--bg);
-  color: var(--text);
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-button, input, select, textarea {
-  font: inherit;
-}
-
-button {
-  cursor: pointer;
-}
-
-.app-shell {
-  min-height: 100vh;
-}
-
-/* SIDEBAR */
-
-.sidebar {
-  position: fixed;
-  inset: 0 auto 0 0;
-  width: 248px;
-  padding: 25px 17px 20px;
-  background: rgba(3,13,23,.94);
-  border-right: 1px solid var(--line);
-  z-index: 20;
-  display: flex;
-  flex-direction: column;
-  backdrop-filter: blur(18px);
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 2px 8px 28px;
-}
-
-.brand-mark {
-  width: 43px;
-  height: 43px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--cyan);
-  border-radius: 13px;
-  color: var(--cyan);
-  font-weight: 900;
-  font-size: 23px;
-  text-shadow: 0 0 14px var(--cyan);
-  box-shadow: 0 0 22px rgba(0,217,247,.15);
-  transform: skew(-5deg);
-}
-
-.brand-name {
-  font-weight: 900;
-  letter-spacing: .08em;
-  font-size: 15px;
-  line-height: 1.15;
-}
-
-.brand-name span {
-  display: block;
-  color: var(--cyan);
-  font-size: 10px;
-  letter-spacing: .22em;
-  margin-top: 5px;
-}
-
-.nav-label {
-  padding: 7px 12px 9px;
-  color: #557c91;
-  font-family: monospace;
-  font-size: 10px;
-  letter-spacing: .18em;
-  text-transform: uppercase;
-}
-
-.nav {
-  display: grid;
-  gap: 7px;
-}
-
-.nav-link {
-  width: 100%;
-  border: 1px solid transparent;
-  background: transparent;
-  color: #9bbaca;
-  display: flex;
-  align-items: center;
-  gap: 13px;
-  padding: 12px 13px;
-  border-radius: 12px;
-  text-align: left;
-  transition: .18s;
-  font-weight: 650;
-}
-
-.nav-link .nav-icon {
-  width: 23px;
-  text-align: center;
-  font-size: 18px;
-}
-
-.nav-link:hover {
-  color: var(--text);
-  background: rgba(0,199,239,.07);
-  border-color: var(--line);
-}
-
-.nav-link.active {
-  color: #e9fcff;
-  background: linear-gradient(
-    100deg,
-    rgba(0,202,239,.22),
-    rgba(0,124,178,.08)
-  );
-  border-color: var(--line2);
-  box-shadow: inset 3px 0 var(--cyan);
-}
-
-.sidebar-bottom {
-  margin-top: auto;
-}
-
-.consent-mini {
-  border: 1px solid rgba(24,230,162,.35);
-  border-radius: 15px;
-  padding: 16px 13px;
-  background: rgba(0,74,66,.20);
-  text-align: center;
-}
-
-.shield {
-  font-size: 28px;
-  color: var(--green);
-}
-
-.consent-mini strong {
-  display: block;
-  color: var(--green);
-  font-size: 13px;
-  margin: 5px 0;
-}
-
-.consent-mini p {
-  margin: 0;
-  color: #91b8c7;
-  font-size: 11px;
-}
-
-.sidebar-foot {
-  padding: 19px 7px 0;
-  color: #517b91;
-  font-size: 11px;
-}
-
-.sidebar-foot b {
-  display: block;
-  color: var(--cyan);
-  font-size: 22px;
-  letter-spacing: .1em;
-}
-
-/* MAIN */
-
-.main {
-  margin-left: 248px;
-  min-height: 100vh;
-  padding: 0 30px 40px;
-}
-
-.topbar {
-  height: 88px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 15px;
-  border-bottom: 1px solid rgba(0,210,255,.16);
-  margin-bottom: 25px;
-}
-
-.top-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.page-kicker {
-  color: var(--muted);
-  font-family: monospace;
-  font-size: 10px;
-  letter-spacing: .2em;
-  text-transform: uppercase;
-}
-
-.page-title {
-  margin: 2px 0 0;
-  font-size: 22px;
-}
-
-.top-right {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.demo-pill {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid rgba(24,230,162,.38);
-  border-radius: 30px;
-  padding: 8px 13px;
-  background: rgba(0,110,82,.16);
-  color: var(--green);
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.pulse {
-  width: 7px;
-  height: 7px;
-  background: var(--green);
-  border-radius: 50%;
-  box-shadow: 0 0 9px var(--green);
-}
-
-.clock {
-  font-family: monospace;
-  font-size: 12px;
-  text-align: right;
-}
-
-.clock small {
-  display: block;
-  color: #6e9db3;
-  font-size: 10px;
-}
-
-.profile {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding-left: 13px;
-  border-left: 1px solid var(--line);
-}
-
-.avatar {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--cyan);
-  background: #0d3045;
-  color: var(--cyan);
-  font-weight: 900;
-}
-
-.profile b {
-  display: block;
-  font-size: 12px;
-}
-
-.profile small {
-  color: var(--green);
-  font-size: 10px;
-}
-
-.menu-toggle {
-  display: none;
-  border: 1px solid var(--line);
-  background: var(--panel);
-  color: var(--cyan);
-  width: 40px;
-  height: 40px;
-  border-radius: 11px;
-  font-size: 19px;
-}
-
-.content {
-  max-width: 1450px;
-  margin: 0 auto;
-}
-
-.notice {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 12px 15px;
-  border: 1px solid rgba(24,230,162,.28);
-  border-radius: 13px;
-  background: rgba(0,94,73,.12);
-  color: #9bd8c9;
-  font-size: 12px;
-  margin-bottom: 20px;
-}
-
-.notice strong {
-  color: var(--green);
-}
-
-/* STAT CARDS */
-
-.stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0,1fr));
-  gap: 14px;
-  margin-bottom: 19px;
-}
-
-.stat-card,
-.panel {
-  background: linear-gradient(
-    145deg,
-    rgba(9,31,47,.95),
-    rgba(4,17,29,.94)
-  );
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: 0 0 28px rgba(0,195,255,.09);
-}
-
-.stat-card {
-  padding: 18px;
-  min-height: 116px;
-  position: relative;
-  overflow: hidden;
-}
-
-.stat-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  color: #a4c5d4;
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.stat-icon {
-  font-size: 20px;
-  color: var(--cyan);
-}
-
-.stat-value {
-  font-size: 29px;
-  font-weight: 850;
-  margin-top: 7px;
-}
-
-.stat-sub {
-  font-size: 10px;
-  color: #7098ac;
-}
-
-.stat-value.green {
-  color: var(--green);
-}
-
-.stat-value.cyan {
-  color: var(--cyan);
-}
-
-/* PANELS */
-
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: minmax(0,1.65fr) minmax(250px,.8fr);
-  gap: 17px;
-  align-items: start;
-}
-
-.panel {
-  padding: 21px;
-  margin-bottom: 17px;
-}
-
-.panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 17px;
-}
-
-.panel-title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 800;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.panel-title .ico {
-  color: var(--cyan);
-  font-size: 19px;
-}
-
-.panel-sub {
-  font-size: 11px;
-  color: #7097aa;
-}
-
-/* FORM */
-
-.field-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 13px;
-}
-
-.field label {
-  display: block;
-  color: #91b6c8;
-  font-size: 11px;
-  margin-bottom: 7px;
-  font-weight: 650;
-}
-
-.control {
-  width: 100%;
-  background: #061522;
-  border: 1px solid rgba(92,160,190,.3);
-  border-radius: 11px;
-  color: var(--text);
-  padding: 12px 13px;
-  outline: none;
-  transition: .18s;
-}
-
-.control:focus {
-  border-color: var(--cyan);
-  box-shadow: 0 0 0 3px rgba(0,217,247,.08);
-}
-
-textarea.control {
-  min-height: 105px;
-  resize: vertical;
-}
-
-.message-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin: 16px 0 7px;
-}
-
-.message-head label {
-  color: #91b6c8;
-  font-size: 11px;
-  font-weight: 650;
-}
-
-.counter {
-  font-family: monospace;
-  font-size: 10px;
-  color: #6e9db3;
-}
-
-.primary-btn {
-  width: 100%;
-  margin-top: 14px;
-  border: 0;
-  border-radius: 11px;
-  padding: 13px 16px;
-  background: linear-gradient(90deg,#08cde9,#00a9d6);
-  color: #00131c;
-  font-weight: 900;
-  box-shadow: 0 6px 20px rgba(0,190,230,.2);
-  transition: .18s;
-}
-
-.primary-btn:hover {
-  filter: brightness(1.1);
-  transform: translateY(-1px);
-}
-
-.primary-btn:disabled {
-  opacity: .55;
-  cursor: wait;
-  transform: none;
-}
-
-/* RIGHT SIDE */
-
-.side-stack {
-  display: grid;
-  gap: 15px;
-}
-
-.demo-card {
-  padding: 20px;
-  border: 1px solid rgba(0,217,247,.4);
-  border-radius: var(--radius);
-  background: #061927;
-}
-
-.big-shield {
-  text-align: center;
-  color: var(--green);
-  font-size: 38px;
-}
-
-.demo-card h3 {
-  text-align: center;
-  color: var(--green);
-  margin: 4px 0 8px;
-  font-size: 17px;
-}
-
-.demo-card p {
-  color: #a0c3d2;
-  font-size: 12px;
-  text-align: center;
-  margin: 0;
-}
-
-.consent-card {
-  padding: 18px;
-  border: 1px solid rgba(24,230,162,.28);
-  border-radius: var(--radius);
-  background: rgba(0,76,65,.12);
-}
-
-.consent-row {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-}
-
-.checkmark {
-  flex: none;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: rgba(24,230,162,.15);
-  color: var(--green);
-  font-size: 17px;
-}
-
-.consent-card p {
-  margin: 0;
-  color: #a4c7d4;
-  font-size: 12px;
-}
-
-/* LOGS */
-
-.log-panel {
-  padding: 0;
-  overflow: hidden;
-}
-
-.log-panel .panel-head {
-  padding: 19px 20px 0;
-}
-
-.log-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 12px;
-}
-
-.log-table th {
-  text-align: left;
-  color: #7097aa;
-  font-size: 10px;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  padding: 11px 18px;
-  border-bottom: 1px solid rgba(0,210,255,.14);
-}
-
-.log-table td {
-  padding: 12px 18px;
-  border-bottom: 1px solid rgba(0,210,255,.09);
-  color: #c5e0eb;
-}
-
-.log-table tr:last-child td {
-  border-bottom: 0;
-}
-
-.log-table td:first-child {
-  font-family: monospace;
-  font-size: 11px;
-  color: #79a4b9;
-  white-space: nowrap;
-}
-
-.status-tag {
-  display: inline-block;
-  padding: 3px 8px;
-  border-radius: 20px;
-  font-size: 9px;
-  font-weight: 850;
-  color: var(--cyan);
-  background: rgba(0,217,247,.1);
-  border: 1px solid rgba(0,217,247,.3);
-}
-
-.status-tag.ready {
-  color: var(--green);
-  background: rgba(24,230,162,.1);
-  border-color: rgba(24,230,162,.3);
-}
-
-.view-link {
-  border: 0;
-  background: none;
-  color: var(--cyan);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-/* OTHER PAGES */
-
-.view {
-  display: none;
-}
-
-.view.active {
-  display: block;
-}
-
-.section-intro {
-  margin: 0 0 18px;
-  color: #83aabc;
-  font-size: 12px;
-}
-
-.recipient-list,
-.template-grid {
-  display: grid;
-  grid-template-columns: repeat(2,minmax(0,1fr));
-  gap: 11px;
-}
-
-.recipient {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 13px;
-  background: rgba(5,23,36,.7);
-}
-
-.recipient-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: rgba(0,217,247,.12);
-  color: var(--cyan);
-  font-weight: 800;
-}
-
-.recipient b {
-  display: block;
-  font-size: 12px;
-}
-
-.recipient small {
-  display: block;
-  color: #7ca3b6;
-  font-size: 10px;
-}
-
-.optin {
-  margin-left: auto;
-  color: var(--green);
-  font-size: 9px;
-  font-weight: 850;
-}
-
-.template-card {
-  padding: 17px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: rgba(5,23,36,.7);
-}
-
-.template-card h3 {
-  font-size: 13px;
-  margin: 0 0 7px;
-}
-
-.template-card p {
-  font-size: 11px;
-  color: #88adbd;
-  min-height: 38px;
-  margin: 0 0 12px;
-}
-
-.ghost-btn {
-  border: 1px solid var(--line2);
-  border-radius: 9px;
-  background: rgba(0,217,247,.06);
-  color: var(--cyan);
-  padding: 8px 11px;
-  font-size: 10px;
-  font-weight: 800;
-}
-
-.settings-list {
-  display: grid;
-  gap: 12px;
-}
-
-.setting {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 15px;
-  padding: 15px;
-  border: 1px solid var(--line);
-  border-radius: 13px;
-  background: rgba(5,23,36,.7);
-}
-
-.setting b {
-  display: block;
-  font-size: 12px;
-}
-
-.setting small {
-  color: #82a9bd;
-  font-size: 10px;
-}
-
-.locked {
-  font-family: monospace;
-  font-size: 10px;
-  color: var(--green);
-  border: 1px solid rgba(24,230,162,.3);
-  border-radius: 20px;
-  padding: 5px 9px;
-  white-space: nowrap;
-}
-
-.toast {
-  position: fixed;
-  right: 22px;
-  bottom: 22px;
-  z-index: 50;
-  max-width: min(390px,calc(100vw - 32px));
-  padding: 13px 17px;
-  border: 1px solid rgba(24,230,162,.4);
-  border-radius: 12px;
-  background: #06251f;
-  color: #c9fff0;
-  opacity: 0;
-  transform: translateY(10px);
-  pointer-events: none;
-  transition: .22s;
-}
-
-.toast.show {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.mobile-overlay {
-  display: none;
-}
-
-.footer {
-  padding: 15px 3px;
-  color: #547f94;
-  font-size: 10px;
-  text-align: center;
-}
-
-/* RESPONSIVE */
-
-@media(max-width:1100px) {
-  .stats {
-    grid-template-columns: repeat(2,minmax(0,1fr));
+  :root{
+    --bg:#0a0a0b; --panel:#121216; --line:#1e1e24;
+    --txt:#d8d8de; --dim:#6a6a76; --accent:#ff5533;
+    --ok:#38d39f; --bad:#ff3355; --warn:#ffb347;
+    --mono:'JetBrains Mono','Fira Code',ui-monospace,Menlo,Consolas,monospace;
   }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--txt);
+    font-family:var(--mono);font-size:14px;line-height:1.5}
+  .wrap{max-width:1180px;margin:0 auto;padding:24px 20px 48px}
+  header{display:flex;align-items:baseline;justify-content:space-between;
+    border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:22px}
+  .brand{font-size:15px;letter-spacing:.28em;color:var(--txt);text-transform:uppercase}
+  .brand span{color:var(--accent)}
+  .status{display:flex;gap:10px;align-items:center;font-size:12px;color:var(--dim)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--dim)}
+  .dot.live{background:var(--ok);box-shadow:0 0 8px var(--ok);animation:pulse 1.4s infinite}
+  @keyframes pulse{50%{opacity:.4}}
 
-  .dashboard-grid {
-    grid-template-columns: 1fr;
-  }
-}
+  .grid{display:grid;grid-template-columns:340px 1fr;gap:18px}
+  @media(max-width:860px){.grid{grid-template-columns:1fr}}
 
-@media(max-width:780px) {
-  .sidebar {
-    transform: translateX(-105%);
-    transition: transform .22s ease;
-    width: 265px;
-  }
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:18px}
+  .card h2{margin:0 0 14px;font-size:11px;letter-spacing:.22em;color:var(--dim);
+    text-transform:uppercase;font-weight:500}
 
-  .sidebar.open {
-    transform: translateX(0);
-  }
+  label{display:block;font-size:11px;color:var(--dim);
+    letter-spacing:.14em;text-transform:uppercase;margin:12px 0 6px}
+  input[type=text],input[type=number]{
+    width:100%;background:#0e0e12;color:var(--txt);border:1px solid var(--line);
+    border-radius:5px;padding:9px 11px;font-family:var(--mono);font-size:14px;outline:none}
+  input:focus{border-color:var(--accent)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
-  .mobile-overlay.show {
-    display: block;
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,.62);
-    z-index: 15;
-  }
+  .toggle{display:flex;align-items:center;gap:10px;margin-top:14px;
+    font-size:12px;color:var(--txt);cursor:pointer;user-select:none}
+  .toggle input{display:none}
+  .track{width:36px;height:20px;border-radius:10px;background:#1e1e24;
+    position:relative;transition:background .15s}
+  .track::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;
+    border-radius:50%;background:var(--dim);transition:all .15s}
+  .toggle input:checked + .track{background:rgba(255,85,51,.25)}
+  .toggle input:checked + .track::after{left:18px;background:var(--accent)}
 
-  .main {
-    margin-left: 0;
-    padding: 0 16px 30px;
-  }
+  .actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}
+  button{border:1px solid var(--line);background:#16161b;color:var(--txt);
+    padding:11px;border-radius:5px;font-family:var(--mono);font-size:12px;
+    letter-spacing:.14em;text-transform:uppercase;cursor:pointer;transition:.12s}
+  button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+  button:disabled{opacity:.35;cursor:not-allowed}
+  button.fire{background:var(--accent);border-color:var(--accent);color:#0a0a0b;font-weight:600}
+  button.fire:hover:not(:disabled){background:#ff7055;color:#0a0a0b}
+  button.stop{border-color:var(--bad);color:var(--bad)}
+  button.stop:hover:not(:disabled){background:rgba(255,51,85,.12)}
 
-  .topbar {
-    height: 74px;
-    margin-bottom: 18px;
-  }
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+  @media(max-width:640px){.stats{grid-template-columns:repeat(2,1fr)}}
+  .stat{background:#0e0e12;border:1px solid var(--line);border-radius:6px;padding:12px}
+  .stat .k{font-size:10px;letter-spacing:.18em;color:var(--dim);text-transform:uppercase}
+  .stat .v{font-size:20px;color:var(--txt);margin-top:4px;font-weight:600}
+  .stat .s{font-size:11px;color:var(--dim);margin-top:2px}
+  .stat .v.ok{color:var(--ok)}
+  .stat .v.warn{color:var(--warn)}
 
-  .menu-toggle {
-    display: block;
-  }
-
-  .page-title {
-    font-size: 18px;
-  }
-
-  .top-right {
-    gap: 10px;
-  }
-
-  .clock {
-    display: none;
-  }
-
-  .profile {
-    padding-left: 9px;
-  }
-
-  .stats {
-    gap: 10px;
-  }
-
-  .stat-card {
-    padding: 14px;
-    min-height: 105px;
-  }
-
-  .stat-value {
-    font-size: 25px;
-  }
-
-  .panel {
-    padding: 16px;
-    border-radius: 15px;
-  }
-
-  .log-panel {
-    padding: 0;
-  }
-
-  .log-panel .panel-head {
-    padding: 16px 16px 0;
-  }
-
-  .log-table th,
-  .log-table td {
-    padding: 10px 12px;
-  }
-}
-
-@media(max-width:520px) {
-  .demo-pill {
-    font-size: 9px;
-    padding: 7px 9px;
-  }
-
-  .profile b {
-    font-size: 11px;
-  }
-
-  .avatar {
-    width: 34px;
-    height: 34px;
-  }
-
-  .field-grid,
-  .recipient-list,
-  .template-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .log-table {
-    min-width: 570px;
-  }
-
-  .table-wrap {
-    overflow-x: auto;
-  }
-
-  .notice {
-    align-items: flex-start;
-    font-size: 11px;
-  }
-
-  .panel-title {
-    font-size: 14px;
-  }
-}
-
-@media(prefers-reduced-motion:reduce) {
-  *,
-  *:before,
-  *:after {
-    scroll-behavior: auto !important;
-    transition: none !important;
-    animation: none !important;
-  }
-}
+  .logbox{background:#060608;border:1px solid var(--line);border-radius:6px;
+    height:520px;overflow-y:auto;padding:12px;font-size:12px}
+  .logbox::-webkit-scrollbar{width:8px}
+  .logbox::-webkit-scrollbar-thumb{background:#1e1e24;border-radius:4px}
+  .ln{display:grid;grid-template-columns:64px 62px 1fr;gap:10px;padding:1px 0}
+  .ln .t{color:var(--dim)}
+  .ln .k{text-transform:uppercase;font-size:10px;letter-spacing:.1em;padding-top:2px}
+  .ln.sms .k{color:var(--warn)}
+  .ln.voice .k{color:#5eb3ff}
+  .ln.cycle .k{color:var(--accent)}
+  .ln.system .k{color:var(--dim)}
+  .ln .m{color:var(--txt);word-break:break-all}
+  .ln .m .ok{color:var(--ok)}
+  .ln .m .bad{color:var(--bad)}
+  .empty{color:var(--dim);text-align:center;padding:40px 0;font-style:italic}
+  .banner{font-size:11px;color:var(--dim);margin-bottom:14px;padding:8px 12px;
+    border:1px solid var(--line);border-radius:5px;background:#0e0e12}
+  .banner .hl{color:var(--accent)}
 </style>
 </head>
-
 <body>
-<div class="app-shell">
+<div class="wrap">
 
-  <!-- SIDEBAR -->
-  <aside class="sidebar" id="sidebar">
-    <div class="brand">
-      <div class="brand-mark">S</div>
-      <div class="brand-name">
-        SEIJI // NOTIFY
-        <span>SMS · CALL CONSOLE</span>
-      </div>
+  <header>
+    <div class="brand">sms<span>·</span>call console</div>
+    <div class="status">
+      <div class="dot" id="dot"></div>
+      <span id="statusTxt">idle</span>
     </div>
+  </header>
 
-    <div class="nav-label">Workspace</div>
+  <div class="banner">
+    open access · each visitor has an isolated session ·
+    <span class="hl">max 4 sessions · max 3 active campaigns</span>
+  </div>
 
-    <nav class="nav" aria-label="Main navigation">
-      <button class="nav-link active" data-view="overview">
-        <span class="nav-icon">⌂</span>Overview
-      </button>
+  <div class="grid">
 
-      <button class="nav-link" data-view="recipients">
-        <span class="nav-icon">♧</span>Recipients
-      </button>
+    <div class="card">
+      <h2>config</h2>
 
-      <button class="nav-link" data-view="templates">
-        <span class="nav-icon">▤</span>Message Templates
-      </button>
+      <label>target number</label>
+      <input type="text" id="phone" placeholder="09XXXXXXXXX" autocomplete="off" />
 
-      <button class="nav-link" data-view="activity">
-        <span class="nav-icon">◷</span>Activity Logs
-      </button>
-
-      <button class="nav-link" data-view="settings">
-        <span class="nav-icon">⚙</span>Settings
-      </button>
-    </nav>
-
-    <div class="sidebar-bottom">
-      <div class="consent-mini">
-        <div class="shield">⬡</div>
-        <strong>Opt-in Status</strong>
-        <b style="color:var(--green);font-size:19px">ACTIVE</b>
-        <p>Demo recipient group<br>consent preview enabled</p>
-      </div>
-
-      <div class="sidebar-foot">
-        <b>SEIJI</b>
-        Build · Create · Innovate
-      </div>
-    </div>
-  </aside>
-
-  <div class="mobile-overlay" id="overlay"></div>
-
-  <!-- MAIN -->
-  <main class="main">
-
-    <header class="topbar">
-      <div class="top-left">
-        <button class="menu-toggle" id="menuToggle" aria-label="Open menu">☰</button>
-
+      <div class="row">
         <div>
-          <div class="page-kicker">
-            Control center / <span id="crumb">Overview</span>
-          </div>
-          <h1 class="page-title" id="pageTitle">Command Dashboard</h1>
+          <label>sms rounds</label>
+          <input type="number" id="rounds" value="3" min="1" max="10" />
+        </div>
+        <div>
+          <label>voice calls</label>
+          <input type="number" id="voice" value="3" min="0" max="10" />
         </div>
       </div>
 
-      <div class="top-right">
-        <div class="demo-pill">
-          <span class="pulse"></span>
-          DEMO MODE · SAFE PREVIEW
-        </div>
+      <label>cycle interval (seconds)</label>
+      <input type="number" id="interval" value="0" min="0" max="60" step="0.5" />
 
-        <div class="clock">
-          <span id="clock">--:--:--</span>
-          <small>PHILIPPINE TIME</small>
-        </div>
+      <label class="toggle">
+        <input type="checkbox" id="continuous" checked />
+        <span class="track"></span>
+        <span>continuous — loop forever</span>
+      </label>
 
-        <div class="profile">
-          <div class="avatar">S</div>
-          <div>
-            <b>Seiji</b>
-            <small>● Online</small>
-          </div>
-        </div>
+      <div class="actions">
+        <button class="fire" id="btnStart">start</button>
+        <button class="stop" id="btnStop" disabled>stop</button>
       </div>
-    </header>
-
-    <div class="content">
-
-      <div class="notice">
-        <span>◆</span>
-        <span>
-          <strong>Demo environment active.</strong>
-          All previews are simulated locally. No SMS, OTP, or voice calls will be sent.
-        </span>
-      </div>
-
-      <!-- OVERVIEW -->
-      <section class="view active" id="view-overview">
-
-        <div class="stats">
-
-          <article class="stat-card">
-            <div class="stat-top">
-              <span>Opt-in Recipients</span>
-              <span class="stat-icon">♧</span>
-            </div>
-            <div class="stat-value" id="recipientCount">24</div>
-            <div class="stat-sub">Illustrative demo count</div>
-          </article>
-
-          <article class="stat-card">
-            <div class="stat-top">
-              <span>Queued Notifications</span>
-              <span class="stat-icon">➤</span>
-            </div>
-            <div class="stat-value cyan" id="queuedCount">0</div>
-            <div class="stat-sub">Nothing queued for delivery</div>
-          </article>
-
-          <article class="stat-card">
-            <div class="stat-top">
-              <span>Delivered (Demo)</span>
-              <span class="stat-icon">✓</span>
-            </div>
-            <div class="stat-value green" id="deliveredCount">0</div>
-            <div class="stat-sub">Simulated previews only</div>
-          </article>
-
-          <article class="stat-card">
-            <div class="stat-top">
-              <span>System Status</span>
-              <span class="stat-icon">∿</span>
-            </div>
-            <div class="stat-value green" id="systemStatus">Online</div>
-            <div class="stat-sub">Local demo service</div>
-          </article>
-
-        </div>
-
-        <div class="dashboard-grid">
-
-          <!-- COMPOSER -->
-          <section class="panel">
-
-            <div class="panel-head">
-              <h2 class="panel-title">
-                <span class="ico">➤</span>
-                Compose Notification
-              </h2>
-              <span class="panel-sub">Preview only</span>
-            </div>
-
-            <form id="previewForm">
-
-              <div class="field-grid">
-
-                <div class="field">
-                  <label for="recipientGroup">Recipient Group</label>
-                  <select class="control" id="recipientGroup">
-                    <option>Subscribed users</option>
-                    <option>Test group</option>
-                    <option>Myself (preview)</option>
-                  </select>
-                </div>
-
-                <div class="field">
-                  <label for="templateSelect">Message Template</label>
-                  <select class="control" id="templateSelect">
-                    <option value="welcome">Welcome Message</option>
-                    <option value="update">Service Update</option>
-                    <option value="reminder">Friendly Reminder</option>
-                  </select>
-                </div>
-
-              </div>
-
-              <div class="message-head">
-                <label for="message">Message Preview</label>
-                <span class="counter" id="charCount">0 / 160</span>
-              </div>
-
-              <textarea
-                class="control"
-                id="message"
-                maxlength="160"
-                required
-              >Hello! Thank you for opting in to our notifications. Stay connected with SEIJI! 🚀</textarea>
-
-              <button class="primary-btn" id="previewButton" type="submit">
-                ➤ &nbsp; Preview Notification
-              </button>
-
-            </form>
-          </section>
-
-          <!-- RIGHT SIDE -->
-          <div class="side-stack">
-
-            <section class="demo-card">
-              <div class="big-shield">⬡</div>
-              <h3>Demo Mode Active</h3>
-              <p>
-                This is a safe preview console.<br>
-                No real SMS, OTP, or calls are sent.<br>
-                Only local demo activity is recorded.
-              </p>
-            </section>
-
-            <section class="consent-card">
-              <div class="panel-head">
-                <h2 class="panel-title">
-                  <span class="ico">✓</span>
-                  Your Consent
-                </h2>
-              </div>
-
-              <div class="consent-row">
-                <div class="checkmark">✓</div>
-                <p>
-                  Use notification lists only when recipients have clearly
-                  opted in. This demo uses sample counts and does not contact anyone.
-                </p>
-              </div>
-            </section>
-
-          </div>
-        </div>
-
-        <!-- RECENT ACTIVITY -->
-        <section class="panel log-panel">
-
-          <div class="panel-head">
-            <h2 class="panel-title">
-              <span class="ico">☷</span>
-              Recent Activity
-            </h2>
-
-            <button class="view-link" data-go="activity">
-              View All →
-            </button>
-          </div>
-
-          <div class="table-wrap">
-            <table class="log-table">
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>Event</th>
-                  <th>Recipient</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-
-              <tbody id="recentLogs">
-                <tr><td colspan="4">Loading demo activity…</td></tr>
-              </tbody>
-            </table>
-          </div>
-
-        </section>
-      </section>
-
-      <!-- RECIPIENTS -->
-      <section class="view" id="view-recipients">
-        <section class="panel">
-
-          <div class="panel-head">
-            <h2 class="panel-title">
-              <span class="ico">♧</span>
-              Opt-in Recipients
-            </h2>
-            <span class="status-tag ready">DEMO DATA</span>
-          </div>
-
-          <p class="section-intro">
-            Sample entries only. No phone numbers or personal contact details
-            are stored in this demo.
-          </p>
-
-          <div class="recipient-list" id="recipientList"></div>
-
-        </section>
-      </section>
-
-      <!-- TEMPLATES -->
-      <section class="view" id="view-templates">
-        <section class="panel">
-
-          <div class="panel-head">
-            <h2 class="panel-title">
-              <span class="ico">▤</span>
-              Message Templates
-            </h2>
-            <span class="panel-sub">
-              Load a template into the preview composer
-            </span>
-          </div>
-
-          <div class="template-grid">
-
-            <article class="template-card">
-              <h3>Welcome Message</h3>
-              <p>
-                Hello! Thank you for opting in to our notifications.
-                Stay connected with SEIJI! 🚀
-              </p>
-              <button class="ghost-btn" data-template="welcome">
-                Use Template
-              </button>
-            </article>
-
-            <article class="template-card">
-              <h3>Service Update</h3>
-              <p>
-                There is a service update available.
-                Open your account to review the latest information.
-              </p>
-              <button class="ghost-btn" data-template="update">
-                Use Template
-              </button>
-            </article>
-
-            <article class="template-card">
-              <h3>Friendly Reminder</h3>
-              <p>
-                This is a friendly reminder.
-                Thank you for staying connected with SEIJI.
-              </p>
-              <button class="ghost-btn" data-template="reminder">
-                Use Template
-              </button>
-            </article>
-
-            <article class="template-card">
-              <h3>Custom Preview</h3>
-              <p>
-                Write your own short message in the composer.
-                Previews are simulated only.
-              </p>
-              <button class="ghost-btn" data-template="custom">
-                Write Custom
-              </button>
-            </article>
-
-          </div>
-        </section>
-      </section>
-
-      <!-- ACTIVITY -->
-      <section class="view" id="view-activity">
-        <section class="panel log-panel">
-
-          <div class="panel-head">
-            <h2 class="panel-title">
-              <span class="ico">◷</span>
-              Activity Logs
-            </h2>
-            <span class="status-tag">LOCAL SIMULATION</span>
-          </div>
-
-          <div class="table-wrap">
-            <table class="log-table">
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>Event</th>
-                  <th>Recipient</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-
-              <tbody id="allLogs">
-                <tr><td colspan="4">Loading demo activity…</td></tr>
-              </tbody>
-            </table>
-          </div>
-
-        </section>
-      </section>
-
-      <!-- SETTINGS -->
-      <section class="view" id="view-settings">
-        <section class="panel">
-
-          <div class="panel-head">
-            <h2 class="panel-title">
-              <span class="ico">⚙</span>
-              Console Settings
-            </h2>
-          </div>
-
-          <div class="settings-list">
-
-            <div class="setting">
-              <div>
-                <b>Demo Mode</b>
-                <small>All notification actions remain simulated.</small>
-              </div>
-              <span class="locked">ALWAYS ON</span>
-            </div>
-
-            <div class="setting">
-              <div>
-                <b>External SMS / Voice Providers</b>
-                <small>Outbound provider integrations are disabled.</small>
-              </div>
-              <span class="locked">DISABLED</span>
-            </div>
-
-            <div class="setting">
-              <div>
-                <b>Recipient Privacy</b>
-                <small>Only illustrative sample recipient labels are shown.</small>
-              </div>
-              <span class="locked">PROTECTED</span>
-            </div>
-
-            <div class="setting">
-              <div>
-                <b>Time Zone</b>
-                <small>Dashboard clock and activity timestamps.</small>
-              </div>
-              <span class="locked">ASIA / MANILA</span>
-            </div>
-
-          </div>
-        </section>
-      </section>
-
-      <div class="footer">
-        SEIJI // NOTIFY CONSOLE · BUILD / CREATE / INNOVATE · DEMO MODE
-      </div>
-
     </div>
-  </main>
-</div>
 
-<div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <div>
+      <div class="stats">
+        <div class="stat">
+          <div class="k">cycle</div>
+          <div class="v" id="sCycle">0</div>
+          <div class="s" id="sUptime">0s</div>
+        </div>
+        <div class="stat">
+          <div class="k">sms</div>
+          <div class="v ok" id="sSms">0</div>
+          <div class="s" id="sSmsTotal">0 fired</div>
+        </div>
+        <div class="stat">
+          <div class="k">voice</div>
+          <div class="v warn" id="sVoice">0</div>
+          <div class="s" id="sVoiceTotal">0 fired</div>
+        </div>
+        <div class="stat">
+          <div class="k">target</div>
+          <div class="v" id="sTarget" style="font-size:14px">—</div>
+          <div class="s" id="sMode">—</div>
+        </div>
+      </div>
+
+      <div class="card" style="padding:0;overflow:hidden">
+        <div class="logbox" id="log">
+          <div class="empty">waiting for start…</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
 
 <script>
 const $ = id => document.getElementById(id);
+const dot = $('dot'), statusTxt = $('statusTxt');
+const logBox = $('log');
 
-const templates = {
-  welcome:
-    "Hello! Thank you for opting in to our notifications. Stay connected with SEIJI! 🚀",
+let autoScroll = true;
+logBox.addEventListener('scroll', () => {
+  autoScroll = logBox.scrollTop + logBox.clientHeight >= logBox.scrollHeight - 12;
+});
 
-  update:
-    "There is a service update available. Open your account to review the latest information.",
-
-  reminder:
-    "This is a friendly reminder. Thank you for staying connected with SEIJI."
-};
-
-const titles = {
-  overview: ["Overview", "Command Dashboard"],
-  recipients: ["Recipients", "Opt-in Recipients"],
-  templates: ["Message Templates", "Message Templates"],
-  activity: ["Activity Logs", "Activity Logs"],
-  settings: ["Settings", "Console Settings"]
-};
-
-let toastTimer;
-
-function toast(message) {
-  const el = $("toast");
-
-  el.textContent = message;
-  el.classList.add("show");
-
-  clearTimeout(toastTimer);
-
-  toastTimer = setTimeout(() => {
-    el.classList.remove("show");
-  }, 3200);
+function fmtUptime(s){
+  s = Math.floor(s);
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), r = s%60;
+  if(h) return `${h}h ${m}m`;
+  if(m) return `${m}m ${r}s`;
+  return `${r}s`;
 }
 
-/* NAVIGATION */
-
-function setView(name) {
-  if (!titles[name]) return;
-
-  document.querySelectorAll(".view").forEach(view => {
-    view.classList.remove("active");
-  });
-
-  $("view-" + name).classList.add("active");
-
-  document.querySelectorAll(".nav-link").forEach(button => {
-    button.classList.toggle(
-      "active",
-      button.dataset.view === name
-    );
-  });
-
-  $("crumb").textContent = titles[name][0];
-  $("pageTitle").textContent = titles[name][1];
-
-  $("sidebar").classList.remove("open");
-  $("overlay").classList.remove("show");
-}
-
-document.querySelectorAll(".nav-link").forEach(button => {
-  button.addEventListener("click", () => {
-    setView(button.dataset.view);
-  });
-});
-
-document.querySelectorAll("[data-go]").forEach(button => {
-  button.addEventListener("click", () => {
-    setView(button.dataset.go);
-  });
-});
-
-/* MOBILE MENU */
-
-$("menuToggle").addEventListener("click", () => {
-  $("sidebar").classList.toggle("open");
-  $("overlay").classList.toggle("show");
-});
-
-$("overlay").addEventListener("click", () => {
-  $("sidebar").classList.remove("open");
-  $("overlay").classList.remove("show");
-});
-
-/* PHILIPPINE CLOCK */
-
-function updateClock() {
-  $("clock").textContent = new Intl.DateTimeFormat("en-PH", {
-    timeZone: "Asia/Manila",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit"
-  }).format(new Date());
-}
-
-updateClock();
-setInterval(updateClock, 1000);
-
-/* CHARACTER COUNTER */
-
-function updateCounter() {
-  $("charCount").textContent =
-    `${$("message").value.length} / 160`;
-}
-
-$("message").addEventListener("input", updateCounter);
-
-$("templateSelect").addEventListener("change", event => {
-  const selected = event.target.value;
-
-  if (templates[selected]) {
-    $("message").value = templates[selected];
-  }
-
-  updateCounter();
-});
-
-updateCounter();
-
-/* TEMPLATE BUTTONS */
-
-document.querySelectorAll("[data-template]").forEach(button => {
-  button.addEventListener("click", () => {
-    const name = button.dataset.template;
-
-    setView("overview");
-
-    if (templates[name]) {
-      $("templateSelect").value = name;
-      $("message").value = templates[name];
-    } else {
-      $("templateSelect").value = "welcome";
-      $("message").value = "";
-      $("message").focus();
-    }
-
-    updateCounter();
-    toast("Template loaded into preview composer.");
-  });
-});
-
-/* ACTIVITY TABLE */
-
-function makeCell(row, value) {
-  const td = document.createElement("td");
-  td.textContent = value ?? "";
-  row.appendChild(td);
-}
-
-function fillLogTable(target, logs) {
-  target.replaceChildren();
-
-  if (!logs || !logs.length) {
-    const row = document.createElement("tr");
-    const cell = document.createElement("td");
-
-    cell.colSpan = 4;
-    cell.textContent = "No demo activity yet.";
-
-    row.appendChild(cell);
-    target.appendChild(row);
+function renderLog(lines){
+  if(!lines.length){
+    logBox.innerHTML = '<div class="empty">waiting for start…</div>';
     return;
   }
+  logBox.innerHTML = lines.map(l => {
+    let m = String(l.msg);
+    m = m.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    m = m.replace(/\bOK\b/g, '<span class="ok">OK</span>');
+    m = m.replace(/\bFAIL\b/g, '<span class="bad">FAIL</span>');
+    return `<div class="ln ${l.kind}">
+      <span class="t">${l.t}</span>
+      <span class="k">${l.kind}</span>
+      <span class="m">${m}</span>
+    </div>`;
+  }).join('');
+  if(autoScroll) logBox.scrollTop = logBox.scrollHeight;
+}
 
-  logs.forEach(item => {
-    const row = document.createElement("tr");
+async function poll(){
+  try{
+    const r = await fetch('/api/status', {credentials:'same-origin'});
+    if (!r.ok) return;
+    const s = await r.json();
+    dot.classList.toggle('live', s.running);
+    statusTxt.textContent = s.running
+      ? (s.continuous ? 'looping' : 'running')
+      : 'idle';
+    $('btnStart').disabled = s.running;
+    $('btnStop').disabled  = !s.running;
 
-    makeCell(row, item.time);
-    makeCell(row, item.event);
-    makeCell(row, item.recipient);
+    $('sCycle').textContent = s.cycle;
+    $('sUptime').textContent = s.running ? fmtUptime(s.uptime) : '—';
+    $('sSms').textContent = s.sms_ok;
+    $('sSmsTotal').textContent = `${s.sms_total} fired`;
+    $('sVoice').textContent = s.voice_ok;
+    $('sVoiceTotal').textContent = `${s.voice_total} fired`;
+    $('sTarget').textContent = s.phone ? `+63${s.phone}` : '—';
+    $('sMode').textContent = s.running
+      ? (s.continuous ? `loop · ${s.interval}s` : 'single pass')
+      : '—';
 
-    const td = document.createElement("td");
-    const tag = document.createElement("span");
+    renderLog(s.log);
+  }catch(e){ /* ignore */ }
+}
 
-    tag.className =
-      "status-tag" +
-      (item.status === "READY" ? " ready" : "");
-
-    tag.textContent = item.status;
-
-    td.appendChild(tag);
-    row.appendChild(td);
-
-    target.appendChild(row);
+$('btnStart').onclick = async () => {
+  const body = {
+    phone: $('phone').value.trim(),
+    rounds: parseInt($('rounds').value,10) || 3,
+    voice_calls: parseInt($('voice').value,10),
+    interval: parseFloat($('interval').value) || 0,
+    continuous: $('continuous').checked,
+  };
+  if (isNaN(body.voice_calls)) body.voice_calls = 0;
+  const r = await fetch('/api/start',{
+    method:'POST',
+    headers: {'Content-Type':'application/json'},
+    credentials: 'same-origin',
+    body: JSON.stringify(body)
   });
-}
+  const d = await r.json().catch(() => ({}));
+  if(!d.ok){ alert(d.err || `failed (${r.status})`); return; }
+  poll();
+};
 
-/* DEMO RECIPIENTS */
+$('btnStop').onclick = async () => {
+  await fetch('/api/stop',{method:'POST', credentials:'same-origin'});
+  poll();
+};
 
-function renderRecipients(count) {
-  const list = $("recipientList");
-
-  list.replaceChildren();
-
-  for (let i = 1; i <= Math.min(count, 8); i++) {
-    const card = document.createElement("div");
-    card.className = "recipient";
-
-    const avatar = document.createElement("div");
-    avatar.className = "recipient-avatar";
-    avatar.textContent = String(i).padStart(2, "0");
-
-    const details = document.createElement("div");
-
-    const name = document.createElement("b");
-    name.textContent =
-      `Demo Subscriber ${String(i).padStart(3, "0")}`;
-
-    const note = document.createElement("small");
-    note.textContent =
-      "Sample profile · no contact details";
-
-    details.append(name, note);
-
-    const status = document.createElement("span");
-    status.className = "optin";
-    status.textContent = "OPT-IN";
-
-    card.append(avatar, details, status);
-    list.appendChild(card);
-  }
-}
-
-/* STATUS API */
-
-async function refreshStatus() {
-  try {
-    const response = await fetch("/api/status", {
-      credentials: "same-origin",
-      cache: "no-store"
-    });
-
-    if (!response.ok) {
-      throw new Error("Status unavailable");
-    }
-
-    const data = await response.json();
-
-    $("recipientCount").textContent = data.recipients;
-    $("queuedCount").textContent = data.queued;
-    $("deliveredCount").textContent = data.delivered_demo;
-
-    $("systemStatus").textContent =
-      data.online ? "Online" : "Offline";
-
-    fillLogTable(
-      $("recentLogs"),
-      (data.logs || []).slice(0, 5)
-    );
-
-    fillLogTable(
-      $("allLogs"),
-      data.logs || []
-    );
-
-    renderRecipients(data.recipients || 0);
-
-  } catch (error) {
-    $("systemStatus").textContent = "Offline";
-  }
-}
-
-/* LOCAL DEMO PREVIEW */
-
-$("previewForm").addEventListener("submit", async event => {
-  event.preventDefault();
-
-  const button = $("previewButton");
-
-  button.disabled = true;
-  button.textContent = "Creating local preview…";
-
-  try {
-    const response = await fetch("/api/demo/preview", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      credentials: "same-origin",
-
-      body: JSON.stringify({
-        group: $("recipientGroup").value,
-        template: $("templateSelect").value,
-        message: $("message").value
-      })
-    });
-
-    const data = await response.json();
-
-    if (!response.ok || !data.ok) {
-      throw new Error(
-        data.error || "Could not create preview."
-      );
-    }
-
-    $("deliveredCount").textContent =
-      data.delivered_demo;
-
-    fillLogTable(
-      $("recentLogs"),
-      (data.logs || []).slice(0, 5)
-    );
-
-    fillLogTable(
-      $("allLogs"),
-      data.logs || []
-    );
-
-    toast(data.message);
-
-  } catch (error) {
-    toast(error.message || "Preview failed.");
-
-  } finally {
-    button.disabled = false;
-    button.textContent = "➤  Preview Notification";
-  }
-});
-
-/* INITIALIZE */
-
-refreshStatus();
-setInterval(refreshStatus, 4000);
+setInterval(poll, 500);
+poll();
 </script>
 </body>
 </html>
